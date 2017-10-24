@@ -1,6 +1,6 @@
 ---
 title: "STAT/MATH 495: Problem Set 07"
-author: "WRITE YOUR NAME(S) HERE"
+author: "Jeff Lancaster"
 date: "2017-10-24"
 output:
   html_document:
@@ -16,29 +16,26 @@ output:
 knitr::opts_chunk$set(
   echo = TRUE, fig.width=8, fig.height=4.5, message=FALSE, warning = FALSE
   )
-set.seed(76)
+set.seed(50)
 
 # Load packages
 library(tidyverse)
 library(broom)
 library(knitr)
+library(ROCR)
 
-train <- read_csv("data/cs-training.csv") %>% 
+train <- read_csv("../PS07/data/cs-training.csv") %>% 
   rename(Id = X1)
-test <- read_csv("data/cs-test.csv") %>% 
+test <- read_csv("../PS07/data/cs-test.csv") %>% 
   rename(Id = X1)
-submission <- read_csv("data/sampleEntry.csv")
+submission <- read_csv("../PS07/data/sampleEntry.csv")
 ```
 
 Information on the competition can be found [here](https://www.kaggle.com/c/GiveMeSomeCredit/data).
 
+#Collaboration
 
-
-# Collaboration
-
-Please indicate who you collaborated with on this assignment: 
-
-
+Please indicate who you collaborated with on this assignment: None
 
 # Build binary classifier
 
@@ -46,20 +43,37 @@ Build the binary classifier based on a single predictor variable: `DebtRatio`,
 `age`, or `MonthlyIncome`. Justify this choice.
 
 ```{r}
-
+ggplot(train, aes(as.factor(SeriousDlqin2yrs), age)) + geom_boxplot()
 ```
+I chose Age because the boxplot that my code generates indicates that the average age for people who have had serious delinquincies in the last 2 years is significantly lower than the average age of those who have not.  I guess this makes sense because as you get older, your financial security increases (as a general rule).
 
-
+```{r,warnings=F}
+mod1 <- glm(SeriousDlqin2yrs~age, data=train, family="binomial")
+log_odds <- predict(mod1, newdata=test)
+p_hat <- 1/(1 + exp(-log_odds))
+test<-mutate(test,Probability=p_hat)
+submission<-test[,c(1,13)]
+write.csv(submission, "submission.csv", row.names = FALSE)
+```
 
 # ROC curve
 
 Based on the ultimate classifier you choose, plot a corresponding ROC curve.
 
 ```{r}
+train2 <- mod1 %>% 
+  broom::augment() %>% 
+  as_tibble() %>% 
+  mutate(p_hat = 1/(1+exp(-.fitted)))
 
+#ROC curve itself
+predicted <- prediction(train2$p_hat, train2$SeriousDlqin2yrs)
+rates <- performance(predicted, "tpr","fpr")
+
+#Area under Curve
+auc <- as.numeric(performance(predicted,"auc")@y.values)
+plot(rates, main=paste("Area under Curve =", round(auc, 3)))
 ```
-
-
 
 # ROC curve for random guessing
 
@@ -67,5 +81,12 @@ Instead of using any predictor information as you did above, switch your
 predictions to random guesses and plot the resulting ROC curve.
 
 ```{r}
+rand_p_hat<-runif(length(train2$SeriousDlqin2yrs),0,1)
+pred <- prediction(rand_p_hat, train2$SeriousDlqin2yrs)
+perf <- performance(pred, "tpr","fpr")
 
+auc <- as.numeric(performance(pred,"auc")@y.values)
+auc #should be close to 0.5, obviously
+
+plot(perf, main=paste("Area Under the Curve =", round(auc, 3))) #should be close to linear with y=x equation
 ```
